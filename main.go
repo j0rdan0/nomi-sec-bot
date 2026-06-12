@@ -45,7 +45,11 @@ func main() {
 		Commands: []telego.BotCommand{
 			{
 				Command:     "cve",
-				Description: "Get latest PoCs for a specific year (Usage: /cve 2024 5)",
+				Description: "Get PoCs by year or CVE ID (Usage: /cve 2024 5 or /cve CVE-2002-1614)",
+			},
+			{
+				Command:     "catchup",
+				Description: "Catch up on missed PoCs added while the bot was offline",
 			},
 		},
 	})
@@ -70,6 +74,14 @@ func main() {
 		}
 		return nil
 	}, th.CommandEqual("cve"))
+
+	// Register /catchup command
+	handler.Handle(func(ctx *th.Context, update telego.Update) error {
+		if update.Message != nil {
+			handleCatchUpCommand(ctx.Bot(), *update.Message)
+		}
+		return nil
+	}, th.CommandEqual("catchup"))
 
 	// Start background checker
 	go StartChecker(bot, chatID)

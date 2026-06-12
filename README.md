@@ -5,14 +5,16 @@ A Telegram bot that monitors the [nomi-sec/PoC-in-GitHub](https://github.com/nom
 ## Features
 
 - **Automated Monitoring:** Checks for new commits in the PoC repository every 24 hours and sends notifications to a specified Telegram chat.
+- **Smart Startup & Catch-up:** On startup, the bot notifies the user of the last date it sent a PoC notification and aligns with the repository head without spamming old notifications. The user can catch up on missed PoCs at any time using `/catchup`.
 - **Detailed Notifications:** Includes CVE ID, repository description, and direct links to the PoC repositories.
 - **On-Demand Queries:** Use the `/cve` command to fetch the latest PoCs for any given year.
 - **Environment Driven:** Configuration is handled via `.env` file for security.
 
 ## Commands
 
-- `/cve <year> <count>` - Fetches the top `count` PoCs for the specified `year`.
-  - Example: `/cve 2024 5`
+- `/cve <year> <count>` - Fetches the top `count` PoCs for the specified `year` (e.g. `/cve 2024 5`).
+- `/cve <CVE-ID>` - Fetches the PoCs for a specific CVE (e.g. `/cve CVE-2002-1614`).
+- `/catchup` - Catch up on missed PoCs that were added while the bot was offline.
 
 ## Setup
 

@@ -80,6 +80,30 @@ func GetRecentCommits() ([]Commit, error) {
 	return commits, err
 }
 
+type CommitInfoResponse struct {
+	Commit struct {
+		Committer struct {
+			Date string `json:"date"`
+		} `json:"committer"`
+	} `json:"commit"`
+}
+
+func GetCommitDate(sha string) (time.Time, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", owner, repo, sha)
+	data, err := githubAPIRequest(url)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	var res CommitInfoResponse
+	err = json.Unmarshal(data, &res)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return time.Parse(time.RFC3339, res.Commit.Committer.Date)
+}
+
 func GetCommitChangedFiles(sha string) ([]string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", owner, repo, sha)
 	data, err := githubAPIRequest(url)
