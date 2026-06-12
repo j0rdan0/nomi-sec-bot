@@ -77,7 +77,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 		} else {
 			lastTimeStr = fmt.Sprintf("`%s`", state.LastNotificationTime.Format("2006-01-02 15:04:05 MST"))
 		}
-		startupMsg := fmt.Sprintf("🤖 *Bot has started!*\n\n📅 *Last PoC notification received on:* %s", lastTimeStr)
+		startupMsg := fmt.Sprintf("*Bot has started!*\n\n*Last PoC notification received on:* %s", lastTimeStr)
 		_, err = bot.SendMessage(ctx, tu.Message(
 			tu.ID(chatID),
 			startupMsg,
@@ -146,7 +146,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 					desc = "_No description provided_"
 				}
 
-				msg := fmt.Sprintf("🚨 *New PoC for %s*\n\n📝 *Description:*\n%s\n\n🔗 [PoC Repository](%s)", 
+				msg := fmt.Sprintf("*New PoC for %s*\n\n*Description:*\n%s\n\n[PoC Repository](%s)", 
 					info.Name, desc, info.RepositoryURL)
 				_, err = bot.SendMessage(ctx, tu.Message(
 					tu.ID(chatID),
@@ -174,44 +174,59 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 	}
 }
 
-func CatchUp(bot *telego.Bot, chatID int64) {
+func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 	ctx := context.Background()
 	state, err := LoadState()
 	if err != nil {
 		log.Printf("Error loading state: %v", err)
-		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "❌ Error loading state."))
-		return
-	}
-
-	if state.LastCommitSHA == "" || state.StartupCommitSHA == "" || state.LastCommitSHA == state.StartupCommitSHA {
-		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "✅ You are already caught up! No missed PoCs since the last session."))
+		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "Error loading state."))
 		return
 	}
 
 	commits, err := GetRecentCommits()
 	if err != nil {
 		log.Printf("Error getting recent commits: %v", err)
-		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "❌ Error fetching recent commits from GitHub."))
+		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "Error fetching recent commits from GitHub."))
 		return
 	}
 
 	if len(commits) == 0 {
-		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "❌ No commits found on GitHub."))
+		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "No commits found on GitHub."))
 		return
 	}
 
 	var newCommits []Commit
 	found := false
-	for _, c := range commits {
-		if c.SHA == state.LastCommitSHA {
-			found = true
-			break
+
+	if forceCount > 0 {
+		if forceCount > len(commits) {
+			forceCount = len(commits)
 		}
-		newCommits = append(newCommits, c)
+		newCommits = commits[:forceCount]
+		found = true
+	} else {
+		if state.LastCommitSHA == "" || state.StartupCommitSHA == "" || state.LastCommitSHA == state.StartupCommitSHA {
+			_, _ = bot.SendMessage(ctx, tu.Message(
+				tu.ID(chatID),
+				"You are already caught up! No missed PoCs since the last session.\n\n*Tip:* If you want to force catch up on the last N commits, use `/catchup <count>` (e.g. `/catchup 10`).",
+			).WithParseMode(telego.ModeMarkdown))
+			return
+		}
+
+		for _, c := range commits {
+			if c.SHA == state.LastCommitSHA {
+				found = true
+				break
+			}
+			newCommits = append(newCommits, c)
+		}
 	}
 
 	if len(newCommits) == 0 {
-		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "✅ You are already caught up!"))
+		_, _ = bot.SendMessage(ctx, tu.Message(
+			tu.ID(chatID),
+			"You are already caught up!\n\n*Tip:* If you want to force catch up on the last N commits, use `/catchup <count>` (e.g. `/catchup 10`).",
+		).WithParseMode(telego.ModeMarkdown))
 		state.LastCommitSHA = state.StartupCommitSHA
 		_ = SaveState(state)
 		return
@@ -219,12 +234,12 @@ func CatchUp(bot *telego.Bot, chatID int64) {
 
 	copedMsg := ""
 	if !found {
-		copedMsg = "⚠️ *Note:* Showing only the 30 most recent missed PoCs due to GitHub API limits.\n\n"
+		copedMsg = "*Note:* Showing only the 30 most recent missed PoCs due to GitHub API limits.\n\n"
 	}
 
 	_, _ = bot.SendMessage(ctx, tu.Message(
 		tu.ID(chatID),
-		fmt.Sprintf("🔄 *Catching up: Processing %d missed commits...*", len(newCommits)),
+		fmt.Sprintf("*Catching up: Processing %d missed commits...*", len(newCommits)),
 	).WithParseMode(telego.ModeMarkdown))
 
 	var count int
@@ -250,7 +265,7 @@ func CatchUp(bot *telego.Bot, chatID int64) {
 					desc = "_No description provided_"
 				}
 
-				msg := fmt.Sprintf("🚨 *PoC for %s*\n\n📝 *Description:*\n%s\n\n🔗 [PoC Repository](%s)", 
+				msg := fmt.Sprintf("*PoC for %s*\n\n*Description:*\n%s\n\n[PoC Repository](%s)", 
 					info.Name, desc, info.RepositoryURL)
 				
 				if copedMsg != "" && count == 0 {
@@ -279,6 +294,6 @@ func CatchUp(bot *telego.Bot, chatID int64) {
 
 	_, _ = bot.SendMessage(ctx, tu.Message(
 		tu.ID(chatID),
-		fmt.Sprintf("✅ *Catch-up complete!* Sent %d PoC notifications.", count),
+		fmt.Sprintf("*Catch-up complete!* Sent %d PoC notifications.", count),
 	).WithParseMode(telego.ModeMarkdown))
 }
