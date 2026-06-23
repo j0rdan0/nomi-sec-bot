@@ -96,4 +96,4 @@ go run cmd/tui/main.go
 
 ## License
 
-This project is open-source and available under the MIT License.
+This project is open-source and available under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](file:///Users/j0rdan0/programming/nomi-sec-bot/LICENSE) file for details.
