@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"nomi-sec-bot/poc"
+
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 )
@@ -46,7 +48,7 @@ func handleCVECommand(bot *telego.Bot, message telego.Message) {
 		count = 20 // Lower limit for detailed output
 	}
 
-	cveIDs, err := GetCVEsForYear(year, count)
+	cveIDs, err := poc.GetCVEsForYear(year, count)
 	if err != nil {
 		_, _ = bot.SendMessage(ctx, tu.Message(
 			tu.ID(message.Chat.ID),
@@ -70,7 +72,7 @@ func handleCVECommand(bot *telego.Bot, message telego.Message) {
 
 	for _, id := range cveIDs {
 		filePath := fmt.Sprintf("%s/%s.json", year, id)
-		infos, err := FetchPoCInfo(filePath)
+		infos, err := poc.FetchPoCInfo(filePath)
 		if err != nil {
 			log.Printf("Error fetching info for %s: %v", id, err)
 			continue
@@ -137,7 +139,7 @@ func handleSpecificCVEQuery(bot *telego.Bot, chatID int64, cveID string) {
 		fmt.Sprintf("*Fetching details for %s...*", cveID),
 	).WithParseMode(telego.ModeMarkdown))
 
-	infos, err := FetchPoCInfo(filePath)
+	infos, err := poc.FetchPoCInfo(filePath)
 	if err != nil {
 		log.Printf("Error fetching info for %s: %v", cveID, err)
 		_, _ = bot.SendMessage(ctx, tu.Message(

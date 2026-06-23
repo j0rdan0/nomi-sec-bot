@@ -1,4 +1,4 @@
-package main
+package poc
 
 import (
 	"encoding/json"
@@ -119,10 +119,6 @@ func GetCommitChangedFiles(sha string) ([]string, error) {
 
 	var files []string
 	for _, f := range detail.Files {
-		if strings.HasSuffix(f.Filename, ".json") && !strings.Contains(f.Filename, "/") {
-			// This filters for JSON files in the root, but PoCs are in year folders.
-			// The research said they are in folders like /2024/CVE-*.json
-		}
 		if strings.HasSuffix(f.Filename, ".json") {
 			files = append(files, f.Filename)
 		}

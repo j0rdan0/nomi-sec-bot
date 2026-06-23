@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"nomi-sec-bot/poc"
+
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 )
@@ -32,13 +34,13 @@ func StartChecker(bot *telego.Bot, chatIDStr string) {
 func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 	ctx := context.Background()
 	log.Println("Checking for updates...")
-	state, err := LoadState()
+	state, err := poc.LoadState()
 	if err != nil {
 		log.Printf("Error loading state: %v", err)
 		return
 	}
 
-	commits, err := GetRecentCommits()
+	commits, err := poc.GetRecentCommits()
 	if err != nil {
 		log.Printf("Error getting recent commits: %v", err)
 		return
@@ -56,16 +58,16 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 		if state.LastCommitSHA == "" {
 			state.LastCommitSHA = commits[0].SHA
 		}
-		if err := SaveState(state); err != nil {
+		if err := poc.SaveState(state); err != nil {
 			log.Printf("Error saving state: %v", err)
 		}
 
 		// Inform user about startup and last notification time
 		if state.LastNotificationTime.IsZero() && state.LastCommitSHA != "" {
-			t, err := GetCommitDate(state.LastCommitSHA)
+			t, err := poc.GetCommitDate(state.LastCommitSHA)
 			if err == nil {
 				state.LastNotificationTime = t
-				if err := SaveState(state); err != nil {
+				if err := poc.SaveState(state); err != nil {
 					log.Printf("Error saving state: %v", err)
 				}
 			}
@@ -100,13 +102,13 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 	if baseSHA == "" {
 		state.LastCommitSHA = commits[0].SHA
 		state.StartupCommitSHA = commits[0].SHA
-		if err := SaveState(state); err != nil {
+		if err := poc.SaveState(state); err != nil {
 			log.Printf("Error saving state: %v", err)
 		}
 		return
 	}
 
-	var newCommits []Commit
+	var newCommits []poc.Commit
 	for _, c := range commits {
 		if c.SHA == baseSHA {
 			break
@@ -125,7 +127,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 	for i := len(newCommits) - 1; i >= 0; i-- {
 		commit := newCommits[i]
 		log.Printf("Checking commit %s...", commit.SHA)
-		files, err := GetCommitChangedFiles(commit.SHA)
+		files, err := poc.GetCommitChangedFiles(commit.SHA)
 		if err != nil {
 			log.Printf("Error getting changed files for commit %s: %v", commit.SHA, err)
 			continue
@@ -133,7 +135,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 
 		for _, file := range files {
 			log.Printf("Processing file: %s", file)
-			infos, err := FetchPoCInfo(file)
+			infos, err := poc.FetchPoCInfo(file)
 			if err != nil {
 				log.Printf("Error fetching PoC info for %s: %v", file, err)
 				continue
@@ -169,21 +171,21 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 		state.StartupCommitSHA = commits[0].SHA
 	}
 
-	if err := SaveState(state); err != nil {
+	if err := poc.SaveState(state); err != nil {
 		log.Printf("Error saving state: %v", err)
 	}
 }
 
 func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 	ctx := context.Background()
-	state, err := LoadState()
+	state, err := poc.LoadState()
 	if err != nil {
 		log.Printf("Error loading state: %v", err)
 		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "Error loading state."))
 		return
 	}
 
-	commits, err := GetRecentCommits()
+	commits, err := poc.GetRecentCommits()
 	if err != nil {
 		log.Printf("Error getting recent commits: %v", err)
 		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "Error fetching recent commits from GitHub."))
@@ -195,7 +197,7 @@ func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 		return
 	}
 
-	var newCommits []Commit
+	var newCommits []poc.Commit
 	found := false
 
 	if forceCount > 0 {
@@ -228,7 +230,7 @@ func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 			"You are already caught up!\n\n*Tip:* If you want to force catch up on the last N commits, use `/catchup <count>` (e.g. `/catchup 10`).",
 		).WithParseMode(telego.ModeMarkdown))
 		state.LastCommitSHA = state.StartupCommitSHA
-		_ = SaveState(state)
+		_ = poc.SaveState(state)
 		return
 	}
 
@@ -246,14 +248,14 @@ func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 	// Process new commits from oldest to newest
 	for i := len(newCommits) - 1; i >= 0; i-- {
 		commit := newCommits[i]
-		files, err := GetCommitChangedFiles(commit.SHA)
+		files, err := poc.GetCommitChangedFiles(commit.SHA)
 		if err != nil {
 			log.Printf("Error getting changed files for commit %s: %v", commit.SHA, err)
 			continue
 		}
 
 		for _, file := range files {
-			infos, err := FetchPoCInfo(file)
+			infos, err := poc.FetchPoCInfo(file)
 			if err != nil {
 				log.Printf("Error fetching PoC info for %s: %v", file, err)
 				continue
@@ -288,7 +290,7 @@ func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 
 	state.LastCommitSHA = commits[0].SHA
 	state.StartupCommitSHA = commits[0].SHA
-	if err := SaveState(state); err != nil {
+	if err := poc.SaveState(state); err != nil {
 		log.Printf("Error saving state: %v", err)
 	}
 

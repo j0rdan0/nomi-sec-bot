@@ -1,4 +1,4 @@
-package main
+package poc
 
 import (
 	"encoding/json"

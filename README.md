@@ -45,10 +45,16 @@ A Telegram bot that monitors the [nomi-sec/PoC-in-GitHub](https://github.com/nom
    GITHUB_TOKEN=your_github_token_here (optional)
    ```
 
-4. Build the application:
+4. Build both applications using the Makefile:
    ```bash
-   go build -o nomi-sec-bot .
+   make
    ```
+   *Alternative commands:*
+   - Build only Telegram Bot: `make nomi-sec-bot`
+   - Build only TUI App: `make cve-tui`
+   - Clean built binaries: `make clean`
+   - Run TUI directly: `make run-tui`
+   - Run Bot directly: `make run-bot`
 
 ## Running the Bot
 
@@ -58,6 +64,35 @@ Start the bot by running the executable:
 ```
 
 The bot will initialize, register its command menu, and start the background checker immediately.
+
+## Running the TUI Console App
+
+The project now includes a rich, high-fidelity terminal user interface (TUI) console app built with the [Bubble Tea](https://github.com/charmbracelet/bubbletea) framework.
+
+Run the TUI:
+```bash
+./cve-tui
+```
+or run it directly:
+```bash
+go run cmd/tui/main.go
+```
+
+### TUI Features
+
+- **Latest 5 PoCs:** The main page displays the 5 most recent PoCs fetched dynamically from recent commits on the repository.
+- **On-Demand Query:** Search by Year and Count (e.g., `2024 5`) or directly by specific CVE ID (e.g., `CVE-2024-1234`).
+
+### Keyboard Shortcuts
+
+- **Tab / Shift+Tab:** Switch between the "Latest 5 PoCs" and "Query CVE" tabs
+- **1, 2:** Quick jump to Tab 1 (Latest PoCs) or Tab 2 (Query CVE)
+- **Up / Down Arrow:** Navigate / select PoC entries (in "Query CVE" tab, press `Down` to blur the search box and focus the results list; press `Up` on the first result to refocus the search box)
+- **Esc / /:** Focus search input (Query CVE Tab)
+- **R:** Refresh the latest 5 PoCs (Latest PoCs Tab)
+- **Enter:** Open selected PoC in browser (Latest PoCs Tab, or Query CVE Tab when results are focused); submit search (Query CVE Tab when search input is focused)
+- **O:** Open selected PoC in browser (both tabs)
+- **Q / Ctrl+C:** Quit the application
 
 ## License
 
