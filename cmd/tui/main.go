@@ -123,17 +123,27 @@ type model struct {
 	statusMessage       string
 }
 
-func initialModel() model {
+func initialModel(initialCVE string) model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(accentColor)
 
 	si := textinput.New()
 	si.Placeholder = "e.g. 2024 5 or CVE-2024-1234"
-	si.Focus()
+
+	activeTab := tabLatest
+	searchLoading := false
+	if initialCVE != "" {
+		activeTab = tabQuery
+		si.SetValue(initialCVE)
+		si.Blur()
+		searchLoading = true
+	} else {
+		si.Focus()
+	}
 
 	return model{
-		activeTab:      tabLatest,
+		activeTab:      activeTab,
 		latestLoading:  true,
 		spinner:        s,
 		searchInput:    si,
@@ -141,6 +151,7 @@ func initialModel() model {
 		searchViewport: viewport.New(0, 0),
 		width:          80,
 		height:         24,
+		searchLoading:  searchLoading,
 	}
 }
 
@@ -248,11 +259,15 @@ func searchCVEByIDCmd(cveID string) tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		fetchLatest5PoCsCmd(),
 		m.spinner.Tick,
 		textinput.Blink,
-	)
+	}
+	if m.searchInput.Value() != "" {
+		cmds = append(cmds, searchCVEByIDCmd(m.searchInput.Value()))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *model) updateFocus() {
@@ -440,7 +455,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.querySelectedIndex = 0
-		m.searchViewport.SetContent(formatSearchResults(msg, -1))
+		if !m.searchInput.Focused() && len(m.flatSearchPoCs) > 0 {
+			m.searchViewport.SetContent(formatSearchResults(msg, 0))
+		} else {
+			m.searchViewport.SetContent(formatSearchResults(msg, -1))
+		}
 
 	case searchErrMsg:
 		m.searchErr = msg
@@ -667,7 +686,17 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	var initialCVE string
+	if len(os.Args) > 1 {
+		arg := os.Args[1]
+		if arg == "-h" || arg == "--help" || arg == "-help" {
+			fmt.Printf("Usage: %s [CVE-YYYY-NNNN]\n", os.Args[0])
+			os.Exit(0)
+		}
+		initialCVE = arg
+	}
+
+	p := tea.NewProgram(initialModel(initialCVE), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
