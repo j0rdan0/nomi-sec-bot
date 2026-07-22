@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -84,7 +87,7 @@ var (
 )
 
 type latestPoCsMsg []poc.PoCInfo
-type latestPoCsErrMsg error
+type latestPoCsErrMsg struct{ err error }
 
 type searchResultItem struct {
 	id       string
@@ -93,7 +96,7 @@ type searchResultItem struct {
 }
 
 type searchResultsMsg []searchResultItem
-type searchErrMsg error
+type searchErrMsg struct{ err error }
 
 type model struct {
 	activeTab           tabID
@@ -175,16 +178,23 @@ func openBrowser(url string) error {
 
 func fetchLatest5PoCsCmd() tea.Cmd {
 	return func() tea.Msg {
-		commits, err := poc.GetRecentCommits()
+		orchestratorCtx, orchestratorCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer orchestratorCancel()
+
+		commitsCtx, commitsCancel := context.WithTimeout(orchestratorCtx, 15*time.Second)
+		commits, err := poc.GetRecentCommits(commitsCtx)
+		commitsCancel()
 		if err != nil {
-			return latestPoCsErrMsg(err)
+			return latestPoCsErrMsg{err: err}
 		}
 
 		currentYearStr := strconv.Itoa(time.Now().Year())
 
 		var latestPoCs []poc.PoCInfo
 		for _, commit := range commits {
-			files, err := poc.GetCommitChangedFiles(commit.SHA)
+			filesCtx, filesCancel := context.WithTimeout(orchestratorCtx, 10*time.Second)
+			files, err := poc.GetCommitChangedFiles(filesCtx, commit.SHA)
+			filesCancel()
 			if err != nil {
 				continue
 			}
@@ -195,7 +205,9 @@ func fetchLatest5PoCsCmd() tea.Cmd {
 					continue
 				}
 
-				pocs, err := poc.FetchPoCInfo(file)
+				pocCtx, pocCancel := context.WithTimeout(orchestratorCtx, 10*time.Second)
+				pocs, err := poc.FetchPoCInfo(pocCtx, file)
+				pocCancel()
 				if err == nil {
 					latestPoCs = append(latestPoCs, pocs...)
 					if len(latestPoCs) >= 5 {
@@ -212,15 +224,24 @@ func fetchLatest5PoCsCmd() tea.Cmd {
 
 func searchCVEByYearCmd(year string, count int) tea.Cmd {
 	return func() tea.Msg {
-		cveIDs, err := poc.GetCVEsForYear(year, count)
+		orchestratorCtx, orchestratorCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer orchestratorCancel()
+
+		yearCtx, yearCancel := context.WithTimeout(orchestratorCtx, 15*time.Second)
+		cveIDs, err := poc.GetCVEsForYear(yearCtx, year, count)
+		yearCancel()
 		if err != nil {
-			return searchErrMsg(err)
+			return searchErrMsg{err: err}
 		}
 
 		var items []searchResultItem
 		for _, id := range cveIDs {
 			filePath := fmt.Sprintf("%s/%s.json", year, id)
-			pocs, err := poc.FetchPoCInfo(filePath)
+			
+			pocCtx, pocCancel := context.WithTimeout(orchestratorCtx, 10*time.Second)
+			pocs, err := poc.FetchPoCInfo(pocCtx, filePath)
+			pocCancel()
+
 			items = append(items, searchResultItem{
 				id:       id,
 				pocInfos: pocs,
@@ -241,13 +262,20 @@ func searchCVEByIDCmd(cveID string) tea.Cmd {
 
 		parts := strings.Split(cveIDUpper, "-")
 		if len(parts) < 3 || parts[0] != "CVE" {
-			return searchErrMsg(fmt.Errorf("invalid CVE ID format: expected CVE-YYYY-NNNN"))
+			return searchErrMsg{err: fmt.Errorf("invalid CVE ID format: expected CVE-YYYY-NNNN")}
 		}
 		year := parts[1]
 		filePath := fmt.Sprintf("%s/%s.json", year, cveIDUpper)
-		pocs, err := poc.FetchPoCInfo(filePath)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		pocs, err := poc.FetchPoCInfo(ctx, filePath)
 		if err != nil {
-			return searchErrMsg(fmt.Errorf("no PoCs found or error fetching details for %s", cveIDUpper))
+			if errors.Is(err, poc.ErrNotFound) {
+				return searchErrMsg{err: fmt.Errorf("no PoCs found for %s", cveIDUpper)}
+			}
+			return searchErrMsg{err: fmt.Errorf("error fetching details for %s: %w", cveIDUpper, err)}
 		}
 		return searchResultsMsg([]searchResultItem{
 			{
@@ -442,7 +470,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.latestViewport.SetContent(formatLatestPoCs(msg, m.latestSelectedIndex))
 
 	case latestPoCsErrMsg:
-		m.latestErr = msg
+		m.latestErr = msg.err
 		m.latestLoading = false
 
 	case searchResultsMsg:
@@ -462,7 +490,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case searchErrMsg:
-		m.searchErr = msg
+		m.searchErr = msg.err
 		m.searchLoading = false
 	}
 
@@ -693,6 +721,10 @@ func main() {
 			fmt.Printf("Usage: %s [CVE-YYYY-NNNN]\n", os.Args[0])
 			os.Exit(0)
 		}
+		if !isValidCVEFormat(arg) {
+			fmt.Fprintf(os.Stderr, "Error: invalid CVE ID format '%s'. Expected format: CVE-YYYY-NNNN\n", arg)
+			os.Exit(1)
+		}
 		initialCVE = arg
 	}
 
@@ -701,4 +733,10 @@ func main() {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}
+}
+
+// isValidCVEFormat checks if the provided string matches the CVE-YYYY-NNNN format (case-insensitive).
+func isValidCVEFormat(cve string) bool {
+	matched, _ := regexp.MatchString("^(?i)CVE-\\d{4}-\\d{4,}$", cve)
+	return matched
 }

@@ -40,7 +40,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 		return
 	}
 
-	commits, err := poc.GetRecentCommits()
+	commits, err := poc.GetRecentCommits(ctx)
 	if err != nil {
 		log.Printf("Error getting recent commits: %v", err)
 		return
@@ -64,7 +64,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 
 		// Inform user about startup and last notification time
 		if state.LastNotificationTime.IsZero() && state.LastCommitSHA != "" {
-			t, err := poc.GetCommitDate(state.LastCommitSHA)
+			t, err := poc.GetCommitDate(ctx, state.LastCommitSHA)
 			if err == nil {
 				state.LastNotificationTime = t
 				if err := poc.SaveState(state); err != nil {
@@ -127,7 +127,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 	for i := len(newCommits) - 1; i >= 0; i-- {
 		commit := newCommits[i]
 		log.Printf("Checking commit %s...", commit.SHA)
-		files, err := poc.GetCommitChangedFiles(commit.SHA)
+		files, err := poc.GetCommitChangedFiles(ctx, commit.SHA)
 		if err != nil {
 			log.Printf("Error getting changed files for commit %s: %v", commit.SHA, err)
 			continue
@@ -135,7 +135,7 @@ func checkUpdates(bot *telego.Bot, chatID int64, isStartup bool) {
 
 		for _, file := range files {
 			log.Printf("Processing file: %s", file)
-			infos, err := poc.FetchPoCInfo(file)
+			infos, err := poc.FetchPoCInfo(ctx, file)
 			if err != nil {
 				log.Printf("Error fetching PoC info for %s: %v", file, err)
 				continue
@@ -185,7 +185,7 @@ func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 		return
 	}
 
-	commits, err := poc.GetRecentCommits()
+	commits, err := poc.GetRecentCommits(ctx)
 	if err != nil {
 		log.Printf("Error getting recent commits: %v", err)
 		_, _ = bot.SendMessage(ctx, tu.Message(tu.ID(chatID), "Error fetching recent commits from GitHub."))
@@ -248,14 +248,14 @@ func CatchUp(bot *telego.Bot, chatID int64, forceCount int) {
 	// Process new commits from oldest to newest
 	for i := len(newCommits) - 1; i >= 0; i-- {
 		commit := newCommits[i]
-		files, err := poc.GetCommitChangedFiles(commit.SHA)
+		files, err := poc.GetCommitChangedFiles(ctx, commit.SHA)
 		if err != nil {
 			log.Printf("Error getting changed files for commit %s: %v", commit.SHA, err)
 			continue
 		}
 
 		for _, file := range files {
-			infos, err := poc.FetchPoCInfo(file)
+			infos, err := poc.FetchPoCInfo(ctx, file)
 			if err != nil {
 				log.Printf("Error fetching PoC info for %s: %v", file, err)
 				continue

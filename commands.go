@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"nomi-sec-bot/poc"
 
@@ -48,7 +50,7 @@ func handleCVECommand(bot *telego.Bot, message telego.Message) {
 		count = 20 // Lower limit for detailed output
 	}
 
-	cveIDs, err := poc.GetCVEsForYear(year, count)
+	cveIDs, err := poc.GetCVEsForYear(ctx, year, count)
 	if err != nil {
 		_, _ = bot.SendMessage(ctx, tu.Message(
 			tu.ID(message.Chat.ID),
@@ -72,7 +74,7 @@ func handleCVECommand(bot *telego.Bot, message telego.Message) {
 
 	for _, id := range cveIDs {
 		filePath := fmt.Sprintf("%s/%s.json", year, id)
-		infos, err := poc.FetchPoCInfo(filePath)
+		infos, err := poc.FetchPoCInfo(ctx, filePath)
 		if err != nil {
 			log.Printf("Error fetching info for %s: %v", id, err)
 			continue
@@ -121,10 +123,10 @@ func handleCatchUpCommand(bot *telego.Bot, message telego.Message) {
 }
 
 func handleSpecificCVEQuery(bot *telego.Bot, chatID int64, cveID string) {
-	ctx := context.Background()
+	responseCtx := context.Background()
 	parts := strings.Split(cveID, "-")
 	if len(parts) < 2 {
-		_, _ = bot.SendMessage(ctx, tu.Message(
+		_, _ = bot.SendMessage(responseCtx, tu.Message(
 			tu.ID(chatID),
 			"Invalid CVE format. Expected `CVE-YYYY-NNNN`.",
 		).WithParseMode(telego.ModeMarkdown))
@@ -134,23 +136,32 @@ func handleSpecificCVEQuery(bot *telego.Bot, chatID int64, cveID string) {
 	year := parts[1]
 	filePath := fmt.Sprintf("%s/%s.json", year, cveID)
 
-	_, _ = bot.SendMessage(ctx, tu.Message(
+	_, _ = bot.SendMessage(responseCtx, tu.Message(
 		tu.ID(chatID),
 		fmt.Sprintf("*Fetching details for %s...*", cveID),
 	).WithParseMode(telego.ModeMarkdown))
 
-	infos, err := poc.FetchPoCInfo(filePath)
+	searchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	infos, err := poc.FetchPoCInfo(searchCtx, filePath)
 	if err != nil {
 		log.Printf("Error fetching info for %s: %v", cveID, err)
-		_, _ = bot.SendMessage(ctx, tu.Message(
+		var errMsg string
+		if errors.Is(err, poc.ErrNotFound) {
+			errMsg = fmt.Sprintf("No PoCs found for *%s*.", cveID)
+		} else {
+			errMsg = fmt.Sprintf("Error fetching details for *%s*: %v", cveID, err)
+		}
+		_, _ = bot.SendMessage(responseCtx, tu.Message(
 			tu.ID(chatID),
-			fmt.Sprintf("No PoCs found or error fetching details for *%s*.", cveID),
+			errMsg,
 		).WithParseMode(telego.ModeMarkdown))
 		return
 	}
 
 	if len(infos) == 0 {
-		_, _ = bot.SendMessage(ctx, tu.Message(
+		_, _ = bot.SendMessage(responseCtx, tu.Message(
 			tu.ID(chatID),
 			fmt.Sprintf("No PoCs found for *%s*.", cveID),
 		).WithParseMode(telego.ModeMarkdown))
@@ -172,7 +183,7 @@ func handleSpecificCVEQuery(bot *telego.Bot, chatID int64, cveID string) {
 	}
 	msg += strings.Join(links, "\n")
 
-	_, err = bot.SendMessage(ctx, tu.Message(
+	_, err = bot.SendMessage(responseCtx, tu.Message(
 		tu.ID(chatID),
 		msg,
 	).WithParseMode(telego.ModeMarkdown))

@@ -1,6 +1,7 @@
 package poc
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,13 +37,15 @@ type PoCInfo struct {
 	Description   string `json:"description"`
 }
 
+var ErrNotFound = fmt.Errorf("resource not found")
+
 var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
+	Timeout: 30 * time.Second,
 }
 
-func githubAPIRequest(url string) ([]byte, error) {
+func githubAPIRequest(ctx context.Context, url string) ([]byte, error) {
 	log.Printf("Requesting: %s", url)
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +64,9 @@ func githubAPIRequest(url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("github api error: %s (url: %s)", resp.Status, url)
 	}
@@ -68,9 +74,9 @@ func githubAPIRequest(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func GetRecentCommits() ([]Commit, error) {
+func GetRecentCommits(ctx context.Context) ([]Commit, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits", owner, repo)
-	data, err := githubAPIRequest(url)
+	data, err := githubAPIRequest(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +94,9 @@ type CommitInfoResponse struct {
 	} `json:"commit"`
 }
 
-func GetCommitDate(sha string) (time.Time, error) {
+func GetCommitDate(ctx context.Context, sha string) (time.Time, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", owner, repo, sha)
-	data, err := githubAPIRequest(url)
+	data, err := githubAPIRequest(ctx, url)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -104,9 +110,9 @@ func GetCommitDate(sha string) (time.Time, error) {
 	return time.Parse(time.RFC3339, res.Commit.Committer.Date)
 }
 
-func GetCommitChangedFiles(sha string) ([]string, error) {
+func GetCommitChangedFiles(ctx context.Context, sha string) ([]string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", owner, repo, sha)
-	data, err := githubAPIRequest(url)
+	data, err := githubAPIRequest(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -126,9 +132,9 @@ func GetCommitChangedFiles(sha string) ([]string, error) {
 	return files, nil
 }
 
-func FetchPoCInfo(filePath string) ([]PoCInfo, error) {
+func FetchPoCInfo(ctx context.Context, filePath string) ([]PoCInfo, error) {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/master/%s", owner, repo, filePath)
-	data, err := githubAPIRequest(url)
+	data, err := githubAPIRequest(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -141,9 +147,9 @@ func FetchPoCInfo(filePath string) ([]PoCInfo, error) {
 	return infos, nil
 }
 
-func GetCVEsForYear(year string, count int) ([]string, error) {
+func GetCVEsForYear(ctx context.Context, year string, count int) ([]string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, year)
-	data, err := githubAPIRequest(url)
+	data, err := githubAPIRequest(ctx, url)
 	if err != nil {
 		return nil, err
 	}
